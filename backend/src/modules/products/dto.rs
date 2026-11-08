@@ -27,6 +27,8 @@ pub struct ProductListItem {
     pub selling_price_idr: i64,
     pub stock_quantity: i32,
     pub low_stock_threshold: i32,
+    /// The product's own threshold, or null when the store default applies.
+    pub low_stock_threshold_override: Option<i32>,
     pub is_low_stock: bool,
     pub registration_status: String,
     pub data_source: String,
@@ -51,6 +53,7 @@ impl From<&ProductRow> for ProductListItem {
             selling_price_idr: row.selling_price_idr,
             stock_quantity: row.stock_quantity,
             low_stock_threshold: row.low_stock_threshold,
+            low_stock_threshold_override: row.low_stock_threshold_override,
             is_low_stock: row.stock_quantity <= row.low_stock_threshold,
             registration_status: row.registration_status.clone(),
             data_source: row.data_source.clone(),

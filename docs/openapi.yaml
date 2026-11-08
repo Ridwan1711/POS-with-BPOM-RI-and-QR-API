@@ -1,0 +1,643 @@
+openapi: 3.1.0
+info:
+  title: POS with BPOM RI & QR API
+  version: 0.1.0
+  description: |
+    REST API for the point of sale. Authentication uses an HttpOnly session cookie (`pos_session`).
+    Pick a store with the `X-Store-Id` header. Without it, the user's first store is used.
+    Money is whole Indonesian rupiah (IDR) as integers. Errors use one shape:
+    `{"error": {"code", "message", "details"}}`.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+tags:
+  - name: auth
+  - name: settings
+  - name: categories
+  - name: products
+  - name: identification
+  - name: inventory
+  - name: sales
+  - name: dashboard
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: pos_session
+  parameters:
+    StoreId:
+      name: X-Store-Id
+      in: header
+      required: false
+      schema: { type: string, format: uuid }
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              examples: [unauthorized, forbidden, not_found, validation_error, duplicate_identifier, insufficient_stock, insufficient_payment, rate_limited, internal_error]
+            message: { type: string }
+            details: {}
+    Pagination:
+      type: object
+      properties:
+        limit: { type: integer }
+        offset: { type: integer }
+        total: { type: integer }
+    Session:
+      type: object
+      properties:
+        user:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            email: { type: string }
+            full_name: { type: string }
+        stores:
+          type: array
+          items:
+            type: object
+            properties:
+              store_id: { type: string, format: uuid }
+              name: { type: string }
+              role: { type: string, enum: [cashier, manager, owner] }
+    ProductListItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        brand: { type: [string, "null"] }
+        sku: { type: [string, "null"] }
+        unit: { type: string }
+        category:
+          type: [object, "null"]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        primary_barcode: { type: [string, "null"] }
+        purchase_price_idr: { type: integer, format: int64 }
+        selling_price_idr: { type: integer, format: int64 }
+        stock_quantity: { type: integer }
+        low_stock_threshold: { type: integer, description: Effective threshold (own value or store default). }
+        low_stock_threshold_override: { type: [integer, "null"] }
+        is_low_stock: { type: boolean }
+        registration_status: { type: string, enum: [unknown, reported, verified, expired] }
+        data_source: { type: string, description: "manual, or the code of the external source the details were confirmed from" }
+        is_active: { type: boolean }
+        updated_at: { type: string, format: date-time }
+    CodeInput:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 2048 }
+    IdentifyResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [existing_product, identified, partially_identified, not_found, provider_unavailable, invalid_code, unsupported_format]
+        message: { type: string }
+        input:
+          type: object
+          properties:
+            raw: { type: string }
+            scheme: { type: [string, "null"] }
+            kind: { type: [string, "null"] }
+            canonical: { type: [string, "null"] }
+        existing_product: { oneOf: [{ $ref: "#/components/schemas/ProductListItem" }, { type: "null" }] }
+        suggestion:
+          type: [object, "null"]
+          description: Only the fields a source supplied are non-null. `fields` lists them.
+          properties:
+            name: { type: [string, "null"] }
+            brand: { type: [string, "null"] }
+            manufacturer: { type: [string, "null"] }
+            description: { type: [string, "null"] }
+            unit_hint: { type: [string, "null"] }
+            image_url: { type: [string, "null"], format: uri }
+            registration:
+              type: [object, "null"]
+              properties:
+                number: { type: [string, "null"] }
+                status: { type: string, enum: [unknown, reported, verified, expired] }
+                valid_until: { type: [string, "null"], format: date }
+                verified_at: { type: [string, "null"], format: date-time }
+            fields: { type: array, items: { type: string } }
+            sources:
+              type: array
+              items:
+                type: object
+                properties:
+                  code: { type: string }
+                  name: { type: string }
+                  confidence: { type: string, enum: [low, medium, high] }
+            primary_source: { type: string }
+            confidence: { type: string, enum: [low, medium, high] }
+            fetched_at: { type: string, format: date-time }
+        providers:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              name: { type: string }
+              confidence: { type: string, enum: [low, medium, high] }
+              outcome: { type: string, enum: [found, not_found, unavailable, not_configured] }
+              message: { type: [string, "null"] }
+              data: { type: [object, "null"] }
+              latency_ms: { type: integer }
+        from_cache: { type: boolean }
+        looked_up_at: { type: string, format: date-time }
+    ProductCreate:
+      type: object
+      required: [name, selling_price_idr]
+      properties:
+        name: { type: string, maxLength: 200 }
+        description: { type: [string, "null"] }
+        brand: { type: [string, "null"] }
+        manufacturer: { type: [string, "null"] }
+        category_id: { type: [string, "null"], format: uuid }
+        sku: { type: [string, "null"], maxLength: 64, description: "Stored in upper case, unique per store." }
+        unit: { type: string, default: pcs }
+        purchase_price_idr: { type: integer, minimum: 0, default: 0 }
+        selling_price_idr: { type: integer, minimum: 1 }
+        initial_stock: { type: integer, minimum: 0, default: 0, description: "Recorded as an initial_stock movement." }
+        low_stock_threshold: { type: [integer, "null"], minimum: 0 }
+        image_url: { type: [string, "null"], description: "https:// only. Not fetched." }
+        registration_number: { type: [string, "null"] }
+        registration_status:
+          type: string
+          enum: [unknown, reported]
+          description: "Manual saves cannot set verified. Only an official source can."
+        registration_valid_until: { type: [string, "null"], format: date }
+        identifiers:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            required: [code]
+            properties:
+              code: { type: string, description: "GTIN barcode, QR payload or internal code. Classified server-side." }
+              is_primary: { type: boolean, default: false }
+        external_source_code:
+          type: [string, "null"]
+          description: "Source the merchant confirmed the details from. Provenance is taken from the server cache."
+    SaleCreate:
+      type: object
+      required: [items, payments]
+      properties:
+        client_request_id:
+          type: [string, "null"]
+          format: uuid
+          description: Idempotency key. A retry with the same key returns the original sale with HTTP 200.
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required: [product_id, quantity]
+            properties:
+              product_id: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1, maximum: 10000 }
+              discount_idr: { type: integer, minimum: 0, default: 0 }
+        discount_idr: { type: integer, minimum: 0, default: 0 }
+        payments:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            type: object
+            required: [method, amount_idr]
+            properties:
+              method: { type: string, enum: [cash, qris, debit_card, credit_card, bank_transfer, ewallet] }
+              amount_idr: { type: integer, minimum: 1 }
+              reference: { type: [string, "null"] }
+        customer_id: { type: [string, "null"], format: uuid }
+    Sale:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        receipt_number: { type: string, example: "20261108-000042" }
+        cashier_name: { type: [string, "null"] }
+        subtotal_idr: { type: integer }
+        item_discount_idr: { type: integer }
+        sale_discount_idr: { type: integer }
+        tax_rate_bps: { type: integer, description: "1100 = 11%" }
+        tax_idr: { type: integer }
+        total_idr: { type: integer }
+        paid_idr: { type: integer }
+        change_idr: { type: integer }
+        created_at: { type: string, format: date-time }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id: { type: [string, "null"], format: uuid }
+              product_name: { type: string }
+              sku: { type: [string, "null"] }
+              unit: { type: string }
+              unit_price_idr: { type: integer }
+              quantity: { type: integer }
+              discount_idr: { type: integer }
+              line_total_idr: { type: integer }
+        payments:
+          type: array
+          items:
+            type: object
+            properties:
+              method: { type: string }
+              amount_idr: { type: integer }
+              reference: { type: [string, "null"] }
+        store:
+          type: object
+          properties:
+            name: { type: string }
+            address: { type: [string, "null"] }
+            phone: { type: [string, "null"] }
+            receipt_footer: { type: [string, "null"] }
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: Sign in. Sets the pos_session cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /auth/logout:
+    post:
+      tags: [auth]
+      security: []
+      summary: Revoke the session and clear the cookie. Idempotent.
+      responses:
+        "204": { description: Signed out }
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Current user and store memberships
+      responses:
+        "200":
+          description: Session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /settings:
+    get:
+      tags: [settings]
+      summary: Store settings
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      responses:
+        "200": { description: Store settings }
+    patch:
+      tags: [settings]
+      summary: Update store settings (owner only)
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                address: { type: [string, "null"] }
+                phone: { type: [string, "null"] }
+                timezone: { type: string, example: Asia/Jakarta }
+                tax_rate_bps: { type: integer, minimum: 0, maximum: 3000 }
+                allow_negative_stock: { type: boolean }
+                default_low_stock_threshold: { type: integer, minimum: 0 }
+                receipt_footer: { type: [string, "null"] }
+      responses:
+        "200": { description: Updated settings }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /categories:
+    get:
+      tags: [categories]
+      summary: List categories with active product counts
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      responses:
+        "200": { description: "{data: [...]}" }
+    post:
+      tags: [categories]
+      summary: Create a category (manager+)
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties: { name: { type: string, maxLength: 100 } }
+      responses:
+        "201": { description: Created }
+        "409": { $ref: "#/components/responses/Error" }
+  /categories/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    patch:
+      tags: [categories]
+      summary: Rename or hide a category (manager+)
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                is_active: { type: boolean }
+      responses:
+        "200": { description: Updated }
+
+  /products:
+    get:
+      tags: [products]
+      summary: List products (search by name, brand, SKU or barcode)
+      parameters:
+        - { $ref: "#/components/parameters/StoreId" }
+        - { name: q, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: status, in: query, schema: { type: string, enum: [active, inactive, all], default: active } }
+        - { name: low_stock, in: query, schema: { type: boolean } }
+        - { name: category_id, in: query, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Page of products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/ProductListItem" } }
+                  pagination: { $ref: "#/components/schemas/Pagination" }
+    post:
+      tags: [products]
+      summary: Create a product (manager+). Duplicate barcodes in the store return 409.
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductCreate" }
+      responses:
+        "201": { description: Created (product detail) }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /products/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [products]
+      summary: Product detail with identifiers and provenance
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      responses:
+        "200": { description: Product detail }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [products]
+      summary: Update merchant fields (manager+). Stock is changed only through inventory.
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Absent fields are unchanged. Explicit null clears nullable fields.
+      responses:
+        "200": { description: Updated product detail }
+    delete:
+      tags: [products]
+      summary: Deactivate (soft delete, manager+). Sales history is kept.
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      responses:
+        "204": { description: Deactivated }
+  /products/{id}/identifiers:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [products]
+      summary: Add a barcode or code (manager+)
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeInput" }
+      responses:
+        "201": { description: Identifier added }
+        "409": { $ref: "#/components/responses/Error" }
+  /products/{id}/identifiers/{identifier_id}:
+    parameters:
+      - { $ref: "#/components/parameters/Id" }
+      - { name: identifier_id, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [products]
+      summary: Remove a barcode or code (manager+)
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      responses:
+        "204": { description: Removed }
+
+  /products/identify:
+    post:
+      tags: [identification]
+      summary: Full identification: local match, cache, external providers (manager+)
+      description: See docs/PRODUCT_IDENTIFICATION.md for statuses and rules.
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeInput" }
+      responses:
+        "200":
+          description: Identification result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IdentifyResponse" }
+        "429": { $ref: "#/components/responses/Error" }
+  /products/scan:
+    post:
+      tags: [identification]
+      summary: Local-only lookup for the cashier. Never calls external providers.
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeInput" }
+      responses:
+        "200":
+          description: "{status: found | not_found | invalid_code | unsupported_format, product}"
+  /products/identifiers/{identifier}:
+    parameters:
+      - { name: identifier, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [identification]
+      summary: Product detail for a code, local only
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      responses:
+        "200": { description: Product detail }
+        "404": { $ref: "#/components/responses/Error" }
+  /external-sources:
+    get:
+      tags: [identification]
+      summary: Registered external sources and whether they are enabled (manager+)
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      responses:
+        "200": { description: "{data: [...]}" }
+
+  /inventory:
+    get:
+      tags: [inventory]
+      summary: Stock levels for active products
+      parameters:
+        - { $ref: "#/components/parameters/StoreId" }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: low_stock, in: query, schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200": { description: Page of products }
+  /inventory/adjustments:
+    post:
+      tags: [inventory]
+      summary: Record a stock change with a reason (manager+)
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, quantity_delta, reason]
+              properties:
+                product_id: { type: string, format: uuid }
+                quantity_delta: { type: integer, description: "Non-zero. Negative removes stock." }
+                reason:
+                  type: string
+                  enum: [restock, return, damage, loss, correction, count_adjustment, other]
+                note: { type: string, maxLength: 500 }
+      responses:
+        "201": { description: Movement and new stock level }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /inventory/movements:
+    get:
+      tags: [inventory]
+      summary: Stock movement history
+      parameters:
+        - { $ref: "#/components/parameters/StoreId" }
+        - { name: product_id, in: query, schema: { type: string, format: uuid } }
+        - { name: reason, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200": { description: Page of movements }
+
+  /sales:
+    get:
+      tags: [sales]
+      summary: Transactions in the store's time zone, with totals for the filtered range
+      parameters:
+        - { $ref: "#/components/parameters/StoreId" }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: q, in: query, schema: { type: string }, description: Receipt number search }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200": { description: Page of sales with summary }
+    post:
+      tags: [sales]
+      summary: Checkout. Prices, discounts, tax and totals are calculated on the server.
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaleCreate" }
+      responses:
+        "201": { description: Sale created }
+        "200": { description: Replay of an earlier request with the same client_request_id }
+        "409": { description: insufficient_stock, $ref: "#/components/responses/Error" }
+        "422": { description: "insufficient_payment, overpayment_requires_cash, unknown_product, product_inactive, invalid_item_discount, invalid_sale_discount, duplicate_product_line, invalid_payment_method", $ref: "#/components/responses/Error" }
+  /sales/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [sales]
+      summary: Receipt
+      parameters: [{ $ref: "#/components/parameters/StoreId" }]
+      responses:
+        "200":
+          description: Receipt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sale" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /dashboard/summary:
+    get:
+      tags: [dashboard]
+      summary: Store-day summary, seven-day trend, low stock and recent sales
+      parameters:
+        - { $ref: "#/components/parameters/StoreId" }
+        - { name: date, in: query, schema: { type: string, format: date }, description: "Store-local date. Defaults to today." }
+      responses:
+        "200": { description: Dashboard summary }
+
+  /health:
+    get:
+      security: []
+      summary: Liveness
+      responses:
+        "200": { description: OK }
+  /health/ready:
+    get:
+      security: []
+      summary: Readiness (checks the database)
+      responses:
+        "200": { description: Ready }

@@ -55,6 +55,9 @@ pub async fn enable_mock_provider(pool: &PgPool) -> AppResult<()> {
     Ok(())
 }
 
+/// (name, category, brand, purchase, selling, stock, low-stock threshold, code, unit)
+type SeedProduct = (&'static str, &'static str, &'static str, i64, i64, i32, Option<i32>, &'static str, &'static str);
+
 pub struct SeedReport {
     pub store_id: Option<Uuid>,
     pub created: bool,
@@ -110,7 +113,7 @@ pub async fn seed_demo(pool: &PgPool, password: &str) -> AppResult<SeedReport> {
     }
 
     // (name, category, brand, purchase, selling, stock, threshold, gtin or internal code, unit)
-    let products: &[(&str, &str, &str, i64, i64, i32, Option<i32>, &str, &str)] = &[
+    let products: &[SeedProduct] = &[
         ("Gula Pasir 1 kg", "Makanan", "Gulaku Demo", 13_000, 16_500, 24, None, "8996001600016", "pcs"),
         ("Minyak Goreng 1 L", "Makanan", "Minyakku Demo", 14_000, 17_500, 3, None, "8996001600023", "botol"),
         ("Teh Celup 25 pcs", "Minuman", "Tehku Demo", 6_000, 9_000, 40, None, "8996001600030", "box"),

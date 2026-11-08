@@ -243,7 +243,7 @@ pub async fn movements(
     Query(query): Query<MovementQuery>,
 ) -> AppResult<Json<Paged<MovementView>>> {
     let (limit, offset) = normalize_page(query.limit, query.offset);
-    let mut qb = QueryBuilder::<Postgres>::new(format!("SELECT m.id, m.product_id, p.name AS product_name, p.sku AS product_sku, m.quantity_delta, m.quantity_after, m.reason, m.note, u.full_name AS created_by_name, m.created_at, COUNT(*) OVER () AS total_count FROM inventory_movements m JOIN products p ON p.id = m.product_id LEFT JOIN users u ON u.id = m.created_by WHERE m.store_id = "));
+    let mut qb = QueryBuilder::<Postgres>::new("SELECT m.id, m.product_id, p.name AS product_name, p.sku AS product_sku, m.quantity_delta, m.quantity_after, m.reason, m.note, u.full_name AS created_by_name, m.created_at, COUNT(*) OVER () AS total_count FROM inventory_movements m JOIN products p ON p.id = m.product_id LEFT JOIN users u ON u.id = m.created_by WHERE m.store_id = ");
     qb.push_bind(ctx.store_id);
     if let Some(product_id) = query.product_id {
         qb.push(" AND m.product_id = ").push_bind(product_id);

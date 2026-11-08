@@ -13,6 +13,7 @@ use crate::{
 pub const PRODUCT_COLUMNS: &str = "p.id, p.name, p.description, p.brand, p.manufacturer, p.sku, p.unit,
     p.category_id, c.name AS category_name, p.purchase_price_idr, p.selling_price_idr, p.stock_quantity,
     COALESCE(p.low_stock_threshold, s.default_low_stock_threshold) AS low_stock_threshold,
+    p.low_stock_threshold AS low_stock_threshold_override,
     p.image_url, p.bpom_registration_number, p.registration_status, p.registration_valid_until,
     p.registration_verified_at, p.data_source, p.is_active, p.created_at, p.updated_at,
     (SELECT i.raw_value FROM product_identifiers i WHERE i.product_id = p.id AND i.is_primary LIMIT 1)
@@ -37,6 +38,7 @@ pub struct ProductRow {
     pub selling_price_idr: i64,
     pub stock_quantity: i32,
     pub low_stock_threshold: i32,
+    pub low_stock_threshold_override: Option<i32>,
     pub image_url: Option<String>,
     pub bpom_registration_number: Option<String>,
     pub registration_status: String,

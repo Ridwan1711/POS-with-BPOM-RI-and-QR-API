@@ -79,7 +79,7 @@ async fn send(
     (status, set_cookie, value)
 }
 
-async fn login(router: &Router, pool: &PgPool, email: &str, store_id: Uuid) -> Session {
+async fn login(router: &Router, pool: &PgPool, email: &str, _store_id: Uuid) -> Session {
     let (status, set_cookie, _) = send(
         router,
         Method::POST,

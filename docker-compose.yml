@@ -1,0 +1,68 @@
+# Local full stack: PostgreSQL, Rust API, Next.js frontend.
+#   cp .env.example .env          # then set POSTGRES_PASSWORD
+#   docker compose up --build
+# Optional demo data (development only), run once after the stack is up:
+#   docker compose --profile seed run --rm seed
+
+name: pos
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pos}
+      POSTGRES_USER: ${POSTGRES_USER:-pos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-pos} -d $${POSTGRES_DB:-pos}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-pos}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-pos}
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_APP_ORIGIN:-http://localhost:3000}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+      BPOM_API_BASE_URL: ${BPOM_API_BASE_URL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8080
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+  seed:
+    profiles: ["seed"]
+    build:
+      context: ./backend
+    entrypoint: ["/usr/local/bin/seed"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-pos}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-pos}
+      SEED_PASSWORD: ${SEED_PASSWORD:-ChangeMe123!}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
