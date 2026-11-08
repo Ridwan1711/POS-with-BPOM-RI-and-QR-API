@@ -287,3 +287,75 @@ async fn unknown_email_and_wrong_password_look_identical(pool: PgPool) {
     assert_eq!(s2, StatusCode::UNAUTHORIZED);
     assert_eq!(b1["error"]["message"], b2["error"]["message"]);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn stock_adjustments_are_ledgered_and_respect_the_negative_stock_policy(pool: PgPool) {
+    let (store_id, _owner, product_id) = fixture(&pool, "owner@test.local", 3, 1_000).await;
+    let router = app(pool.clone());
+    let session = login(&router, &pool, "owner@test.local", store_id).await;
+    let adjust = |delta: i64| {
+        json!({ "product_id": product_id, "quantity_delta": delta, "reason": "loss", "note": "uji" })
+    };
+
+    // Default policy: stock cannot go below zero.
+    let (status, _, body) = send(&router, Method::POST, "/inventory/adjustments", Some(&session.cookie), Some(store_id), Some(adjust(-5))).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "insufficient_stock");
+
+    // A valid adjustment writes exactly one ledger row with the balance after the change.
+    let (status, _, body) = send(&router, Method::POST, "/inventory/adjustments", Some(&session.cookie), Some(store_id), Some(adjust(-2))).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["stock_quantity"], 1);
+    let ledger: (i64, i32) = sqlx::query_as(
+        "SELECT COUNT(*), MAX(quantity_after) FROM inventory_movements WHERE product_id = $1 AND reason = 'loss'",
+    )
+    .bind(product_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(ledger, (1, 1));
+
+    // Only the owner can change the policy: a manager of the same store is refused.
+    let manager = seed::create_user(&pool, "manager@test.local", "Manager", PASSWORD).await.unwrap();
+    seed::add_member(&pool, store_id, manager, pos_backend::auth::Role::Manager).await.unwrap();
+    let manager_session = login(&router, &pool, "manager@test.local", store_id).await;
+    let (status, _, _) = send(
+        &router,
+        Method::PATCH,
+        "/settings",
+        Some(&manager_session.cookie),
+        Some(store_id),
+        Some(json!({ "allow_negative_stock": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "managers cannot change store policy");
+
+    let (status, _, _) = send(
+        &router,
+        Method::PATCH,
+        "/settings",
+        Some(&session.cookie),
+        Some(store_id),
+        Some(json!({ "allow_negative_stock": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "owner may change settings");
+
+    // With the policy enabled, stock may go negative, and the ledger still records it.
+    let (status, _, body) = send(&router, Method::POST, "/inventory/adjustments", Some(&session.cookie), Some(store_id), Some(adjust(-4))).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["stock_quantity"], -3);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn duplicate_category_names_are_refused_case_insensitively(pool: PgPool) {
+    let (store_id, _owner, _product) = fixture(&pool, "owner@test.local", 0, 1_000).await;
+    let router = app(pool.clone());
+    let session = login(&router, &pool, "owner@test.local", store_id).await;
+
+    let (status, _, _) = send(&router, Method::POST, "/categories", Some(&session.cookie), Some(store_id), Some(json!({ "name": "Minuman" }))).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, _, body) = send(&router, Method::POST, "/categories", Some(&session.cookie), Some(store_id), Some(json!({ "name": "minuman" }))).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "duplicate_category");
+}
