@@ -23,6 +23,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let report = seed::seed_demo(&pool, &password).await?;
     seed::enable_mock_provider(&pool).await?;
+    // Open Food Facts is enabled only when a contact User-Agent is configured.
+    if std::env::var("OFF_USER_AGENT").map(|v| !v.trim().is_empty()).unwrap_or(false) {
+        seed::enable_source(&pool, "open_food_facts").await?;
+        println!("Enabled Open Food Facts (OFF_USER_AGENT is set).");
+    }
 
     if report.created {
         println!("Seeded demo store '{}'.", seed::DEMO_STORE_NAME);

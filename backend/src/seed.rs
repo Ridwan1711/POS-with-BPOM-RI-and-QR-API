@@ -49,7 +49,13 @@ pub async fn add_member(pool: &PgPool, store_id: Uuid, user_id: Uuid, role: Role
 
 /// Enables the development mock provider. Never call this in production.
 pub async fn enable_mock_provider(pool: &PgPool) -> AppResult<()> {
-    sqlx::query("UPDATE external_product_sources SET enabled = TRUE, updated_at = now() WHERE code = 'mock'")
+    enable_source(pool, "mock").await
+}
+
+/// Enables a registered external source by its code.
+pub async fn enable_source(pool: &PgPool, code: &str) -> AppResult<()> {
+    sqlx::query("UPDATE external_product_sources SET enabled = TRUE, updated_at = now() WHERE code = $1")
+        .bind(code)
         .execute(pool)
         .await?;
     Ok(())

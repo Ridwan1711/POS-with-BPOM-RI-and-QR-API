@@ -34,6 +34,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
       BPOM_API_BASE_URL: ${BPOM_API_BASE_URL:-}
+      OFF_USER_AGENT: ${OFF_USER_AGENT:-}
     depends_on:
       db:
         condition: service_healthy

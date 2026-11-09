@@ -17,6 +17,10 @@ pub struct Config {
     pub lookup_cache_miss_minutes: i64,
     /// Base URL of an approved BPOM RI integration. Unset means the adapter reports "not configured".
     pub bpom_api_base_url: Option<String>,
+    /// Open Food Facts API base URL.
+    pub off_api_base_url: String,
+    /// Open Food Facts requires `AppName/Version (ContactEmail)`. Keep the real value out of git.
+    pub off_user_agent: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -39,10 +43,16 @@ impl Config {
             cors_allowed_origins: list_or("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),
             login_max_attempts: parse_or("LOGIN_MAX_ATTEMPTS", 10)?,
             login_window_secs: parse_or("LOGIN_WINDOW_SECS", 900)?,
-            provider_timeout_ms: parse_or("PROVIDER_TIMEOUT_MS", 4000)?,
+            // Covers three attempts to Open Food Facts, each capped at 3 s, plus backoff.
+            provider_timeout_ms: parse_or("PROVIDER_TIMEOUT_MS", 12_000)?,
             lookup_cache_hit_hours: parse_or("LOOKUP_CACHE_HIT_HOURS", 168)?,
             lookup_cache_miss_minutes: parse_or("LOOKUP_CACHE_MISS_MINUTES", 60)?,
             bpom_api_base_url: env::var("BPOM_API_BASE_URL")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty()),
+            off_api_base_url: env_or("OFF_API_BASE_URL", "https://world.openfoodfacts.org"),
+            off_user_agent: env::var("OFF_USER_AGENT")
                 .ok()
                 .map(|v| v.trim().to_string())
                 .filter(|v| !v.is_empty()),

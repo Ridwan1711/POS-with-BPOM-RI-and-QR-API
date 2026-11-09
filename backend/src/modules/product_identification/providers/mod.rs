@@ -2,6 +2,7 @@
 
 pub mod bpom;
 pub mod mock;
+pub mod open_food_facts;
 
 use std::sync::Arc;
 
@@ -20,6 +21,10 @@ impl ProviderRegistry {
             providers: vec![
                 Arc::new(mock::MockProvider),
                 Arc::new(bpom::BpomRegistryAdapter::new(config.bpom_api_base_url.clone())),
+                Arc::new(open_food_facts::OpenFoodFactsProvider::new(
+                    config.off_api_base_url.clone(),
+                    config.off_user_agent.clone(),
+                )),
             ],
         }
     }

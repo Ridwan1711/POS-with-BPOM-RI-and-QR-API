@@ -30,6 +30,8 @@ fn test_config() -> Config {
         lookup_cache_hit_hours: 1,
         lookup_cache_miss_minutes: 1,
         bpom_api_base_url: None,
+        off_api_base_url: "https://world.openfoodfacts.org".into(),
+        off_user_agent: None,
     }
 }
 

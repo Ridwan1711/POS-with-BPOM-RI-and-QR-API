@@ -92,6 +92,7 @@ pub trait ProductDataProvider: Send + Sync {
 | Code | Status | Notes |
 | --- | --- | --- |
 | `mock` | Development only, disabled by default | Deterministic catalog. Every value is labelled `[MOCK]`. GTIN `08990000000006` simulates an outage. |
+| `open_food_facts` | Live, disabled by default | Crowdsourced food database (ODbL). Needs `OFF_USER_AGENT`. Rate-limited to 15 per minute. See [integrations/open-food-facts.md](integrations/open-food-facts.md). |
 | `bpom_registry` | Adapter, disabled | Reports `NotConfigured` until `BPOM_API_BASE_URL` is set. It never calls a URL today. See [integrations/bpom.md](integrations/bpom.md). |
 
 ## Sanitization of provider output

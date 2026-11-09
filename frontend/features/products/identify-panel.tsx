@@ -122,6 +122,11 @@ function ResultBlock({ result, onRetry }: { result: IdentifyResponse; onRetry: (
           <p className="text-xs text-muted">
             Check every field before saving. External data can be incomplete or wrong. Prices, stock and SKU are never filled from outside sources.
           </p>
+          {result.suggestion.sources.some((source) => source.code === "open_food_facts") ? (
+            <p className="text-xs text-muted">
+              Data from Open Food Facts, licensed under ODbL. Attribution required. Photos are CC BY-SA.
+            </p>
+          ) : null}
         </div>
       ) : null}
 

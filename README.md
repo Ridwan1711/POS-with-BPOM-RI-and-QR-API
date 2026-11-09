@@ -106,6 +106,8 @@ variable. The important ones:
 | `SESSION_TTL_HOURS` | backend | Session lifetime (default 12) |
 | `PROVIDER_TIMEOUT_MS` | backend | Per-provider lookup timeout (default 4000) |
 | `LOOKUP_CACHE_HIT_HOURS` / `LOOKUP_CACHE_MISS_MINUTES` | backend | Cache lifetime for found and not-found results |
+| `OFF_USER_AGENT` | backend | Open Food Facts User-Agent, `AppName/Version (ContactEmail)`. Required to enable the OFF barcode provider. |
+| `OFF_API_BASE_URL` | backend | Open Food Facts base URL (default `https://world.openfoodfacts.org`) |
 | `BPOM_API_BASE_URL` | backend | Only set after an approved BPOM endpoint is available. Empty by default. |
 | `BACKEND_URL` | frontend | Where the Next.js server sends `/api/v1` requests (read at runtime) |
 
